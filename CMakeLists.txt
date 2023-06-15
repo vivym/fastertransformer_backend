@@ -108,9 +108,10 @@ if (EXISTS ${FT_DIR})
     SOURCE_DIR ${FT_DIR}
   )
 else()
+  # message(FATAL_ERROR "Please set FT_DIR to the path of FasterTransformer repo")
   FetchContent_Declare(
     repo-ft
-    GIT_REPOSITORY https://github.com/NVIDIA/FasterTransformer.git 
+    GIT_REPOSITORY https://github.com/vivym/FasterTransformer.git
     GIT_TAG main
     GIT_SHALLOW ON
   )

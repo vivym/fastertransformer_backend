@@ -59,7 +59,7 @@ def fail_if(p, msg):
 def create_dependencies(base_image):
     df = '''
 ARG BASE_IMAGE={base_image}
-    '''.format(base_image=base_image)
+'''.format(base_image=base_image)
     df += '''
 FROM ${BASE_IMAGE}
 RUN apt-get update && apt-get install -y --no-install-recommends \\
@@ -82,11 +82,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
         zip \\
         zsh \\
         python3-pip
+RUN pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip3 install torch==1.12.1+cu116 -f \\
-                    https://download.pytorch.org/whl/torch_stable.html && \\
+                    https://mirror.sjtu.edu.cn/pytorch-wheels/torch_stable.html && \\
     pip3 install --extra-index-url https://pypi.ngc.nvidia.com regex \\
                     fire tritonclient[all] && \\
-    pip3 install transformers huggingface_hub tokenizers SentencePiece \\
+    pip3 install transformers huggingface_hub tokenizers sentencepiece \\
                     sacrebleu datasets tqdm omegaconf rouge_score && \\
     pip3 install cmake==3.24.3
 RUN apt-get clean && \\
@@ -110,7 +111,7 @@ RUN cmake \\
       -D TRITON_BACKEND_REPO_TAG="r${NVIDIA_TRITON_SERVER_VERSION}" \\
       ..
 RUN make -j"$(grep -c ^processor /proc/cpuinfo)" install
-    '''
+'''
     return df
 
 
@@ -127,13 +128,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     else:
         df = '''
 ENV WORKSPACE /workspace
-WORKDIR /workspace       
+WORKDIR /workspace
 '''
     df += '''
 ENV NCCL_LAUNCH_MODE=GROUP
 RUN sed -i 's/#X11UseLocalhost yes/X11UseLocalhost no/g' /etc/ssh/sshd_config \\
     && mkdir /var/run/sshd -p
-    '''
+'''
     return df
 
 

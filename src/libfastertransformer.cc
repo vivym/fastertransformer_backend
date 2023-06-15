@@ -59,6 +59,7 @@
 #include "src/fastertransformer/triton_backend/t5/T5TritonModelInstance.h"
 #include "src/fastertransformer/triton_backend/t5-encoder/T5EncoderTritonModel.h"
 #include "src/fastertransformer/triton_backend/t5-encoder/T5EncoderTritonModelInstance.h"
+#include "src/fastertransformer/triton_backend/vit/ViTTritonModel.h"
 #include "src/fastertransformer/triton_backend/transformer_triton_backend.hpp"
 #include "src/fastertransformer/utils/Tensor.h"
 #include "src/fastertransformer/utils/cuda_bf16_wrapper.h"
@@ -329,6 +330,24 @@ std::shared_ptr<AbstractTransformerModel> ModelState::ModelFactory(
             tp, pp, custom_ar, model_dir, int8_mode, is_sparse, remove_padding);
 #endif
     }
+  } else if (model_type == "vit") {
+    if (tp > 1 || pp > 1) {
+      THROW_IF_BACKEND_MODEL_ERROR(TRITONSERVER_ErrorNew(TRITONSERVER_ERROR_UNSUPPORTED,
+            ("Model \"" + model_type + "\" with tp > 1 || pp > 1 is not supported").c_str()));
+    }
+
+    const int is_sparse = param_get_bool(param,"is_sparse", false);
+    const int int8_mode = param_get_int(param, "int8_mode");
+
+    if (data_type == "fp16") {
+      ft_model = std::make_shared<ViTTritonModel<half>>(
+            tp, pp, custom_ar, model_dir, int8_mode, is_sparse);
+    } else if (data_type == "fp32") {
+      ft_model = std::make_shared<ViTTritonModel<float>>(
+            tp, pp, custom_ar, model_dir, int8_mode, is_sparse);
+    } else {
+      LOG_MESSAGE(TRITONSERVER_LOG_ERROR, dt_message.c_str());
+    }
   } else {
     THROW_IF_BACKEND_MODEL_ERROR(TRITONSERVER_ErrorNew(TRITONSERVER_ERROR_UNSUPPORTED,
           ("Unknown model \"" + model_type + "\"").c_str()));
@@ -565,8 +584,48 @@ ModelState::AutoCompleteConfig()
           ("Automatically setting return data_type for \"output_hidden_state\" to \"" +
              return_type_map[data_type] + "\"").c_str());
     }
-  }
-  else {
+  } else if (GetParameter("model_type") == "vit") {
+    const std::string data_type = GetParameter("data_type");
+    auto &config = ModelConfig();
+    common::TritonJson::Value inputs, input, dtype_object;
+    common::TritonJson::Value outputs, output;
+    std::string name;
+    config.MemberAsArray("input", &inputs);
+    config.MemberAsArray("output", &outputs);
+
+    std::unordered_map<std::string, std::string> return_type_map {
+      {"fp16", "TYPE_FP16"},
+      {"fp32", "TYPE_FP32"},
+      {"bf16", "TYPE_BF16"}};
+
+    for (size_t idx = 0; idx < inputs.ArraySize(); idx++) {
+      inputs.IndexAsObject(idx, &input);
+      input.MemberAsString("name", &name);
+      if (name != "input_image") {
+        continue;
+      }
+      input.Find("data_type", &dtype_object);
+      dtype_object.SetString(return_type_map[data_type]);
+      LOG_MESSAGE(
+          TRITONSERVER_LOG_VERBOSE,
+          ("Automatically setting return data_type for \"input_image\" to \"" +
+             return_type_map[data_type] + "\"").c_str());
+    }
+
+    for (size_t idx = 0; idx < outputs.ArraySize(); idx++) {
+      outputs.IndexAsObject(idx, &output);
+      output.MemberAsString("name", &name);
+      if (name != "output_hidden_state") {
+        continue;
+      }
+      output.Find("data_type", &dtype_object);
+      dtype_object.SetString(return_type_map[data_type]);
+      LOG_MESSAGE(
+          TRITONSERVER_LOG_VERBOSE,
+          ("Automatically setting return data_type for \"output_hidden_state\" to \"" +
+             return_type_map[data_type] + "\"").c_str());
+    }
+  } else {
     // Auto-complete configuration is not supported since fastertransformer does
     // not store/capture sufficient model metadata so just log error instead.
     LOG_MESSAGE(
